@@ -298,14 +298,12 @@
         </div>
 
         <a
-    id="downloadButton"
-    class="download-button"
-    href="#"
-    target="_blank"
-    rel="noopener"
->
-    DOWNLOAD CUE SHEET!
-</a>
+            id="downloadButton"
+            class="download-button"
+            href="#"
+        >
+            DOWNLOAD CUE SHEET!
+        </a>
 
     </div>
 
@@ -427,25 +425,45 @@ async function checkStatus(jobId) {
             processingBox.style.display = "none";
             successBox.style.display = "block";
 
-            /*
-             * IMPORTANT:
-             * Use the server's native download endpoint.
-             * Do not fetch the CSV with JavaScript.
-             */
-
-            downloadButton.href =
+            const downloadUrl =
                 job.download ||
                 "/download/" + jobId;
 
             /*
-             * Let the browser handle the download
-             * as a normal file request.
+             * Store the working Railway download URL.
              */
+            downloadButton.dataset.downloadUrl =
+                downloadUrl;
 
-            downloadButton.setAttribute(
-                "download",
-                ""
-            );
+            /*
+             * When embedded in GoDaddy, send the URL
+             * to the parent page so the parent can perform
+             * the top-level navigation/download.
+             */
+            downloadButton.onclick = function(event) {
+
+                event.preventDefault();
+
+                const url =
+                    downloadButton.dataset.downloadUrl;
+
+                if (window.parent !== window) {
+
+                    window.parent.postMessage(
+                        {
+                            type: "BLOCK105_DOWNLOAD",
+                            url: url
+                        },
+                        "*"
+                    );
+
+                } else {
+
+                    window.location.href = url;
+
+                }
+
+            };
 
             return;
         }
@@ -483,6 +501,7 @@ function showError(message) {
 
     errorMessage.textContent = message;
     errorBox.style.display = "block";
+
 }
 
 </script>
