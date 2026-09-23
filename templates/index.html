@@ -124,7 +124,8 @@
             background: #ffd633;
         }
 
-        .generate-button:disabled {
+        .generate-button:disabled,
+        .download-button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
         }
@@ -215,10 +216,12 @@
 
 <div class="container">
 
+    <!-- STATION NAME -->
     <div class="station-title">
         THE BLOCK 105 RADIO
     </div>
 
+    <!-- SIMPLE PROCESS -->
     <div class="steps">
         SHOW TITLE
         <span>*</span>
@@ -229,10 +232,12 @@
         DOWNLOAD
     </div>
 
+    <!-- MAIN HEADING -->
     <div class="main-title">
         GENERATE YOUR BLOCK 105 RADIO CUE SHEET
     </div>
 
+    <!-- MAIN FORM -->
     <div id="formCard" class="form-card">
 
         <form id="cueSheetForm">
@@ -275,6 +280,7 @@
 
     </div>
 
+    <!-- PROCESSING -->
     <div
         id="processingBox"
         class="status-box processing"
@@ -283,6 +289,7 @@
         PLEASE WAIT.
     </div>
 
+    <!-- SUCCESS -->
     <div
         id="successBox"
         class="status-box success"
@@ -297,18 +304,17 @@
             GENERATED SUCCESSFULLY
         </div>
 
-        <a
+        <button
             id="downloadButton"
             class="download-button"
-            href="#"
-            target="_blank"
-            rel="noopener"
+            type="button"
         >
             DOWNLOAD CUE SHEET!
-        </a>
+        </button>
 
     </div>
 
+    <!-- ERROR -->
     <div
         id="errorBox"
         class="status-box error"
@@ -317,6 +323,7 @@
     </div>
 
 </div>
+
 
 <script>
 
@@ -329,6 +336,13 @@ const errorBox = document.getElementById("errorBox");
 const errorMessage = document.getElementById("errorMessage");
 const downloadButton = document.getElementById("downloadButton");
 
+let currentDownloadUrl = "";
+let currentShowTitle = "";
+
+
+/* =========================================
+   GENERATE CUE SHEET
+   ========================================= */
 
 form.addEventListener("submit", async function(event) {
 
@@ -353,6 +367,8 @@ form.addEventListener("submit", async function(event) {
         return;
     }
 
+    currentShowTitle = showTitle;
+
     const formData = new FormData();
 
     formData.append("show_title", showTitle);
@@ -366,16 +382,20 @@ form.addEventListener("submit", async function(event) {
 
     try {
 
-        const response = await fetch("/analyze", {
-            method: "POST",
-            body: formData
-        });
+        const response = await fetch(
+            "/analyze",
+            {
+                method: "POST",
+                body: formData
+            }
+        );
 
         const data = await response.json();
 
         if (!response.ok) {
             throw new Error(
-                data.error || "Unable to generate the cue sheet."
+                data.error ||
+                "Unable to generate the cue sheet."
             );
         }
 
@@ -401,6 +421,10 @@ form.addEventListener("submit", async function(event) {
 });
 
 
+/* =========================================
+   CHECK GENERATION STATUS
+   ========================================= */
+
 async function checkStatus(jobId) {
 
     try {
@@ -413,7 +437,8 @@ async function checkStatus(jobId) {
 
         if (!response.ok) {
             throw new Error(
-                job.error || "Unable to check cue sheet status."
+                job.error ||
+                "Unable to check cue sheet status."
             );
         }
 
@@ -423,11 +448,9 @@ async function checkStatus(jobId) {
 
             successBox.style.display = "block";
 
-            const downloadUrl =
+            currentDownloadUrl =
                 job.download ||
                 "/download/" + jobId;
-
-            downloadButton.href = downloadUrl;
 
             return;
         }
@@ -461,9 +484,113 @@ async function checkStatus(jobId) {
 }
 
 
+/* =========================================
+   DOWNLOAD CUE SHEET
+   ========================================= */
+
+downloadButton.addEventListener(
+    "click",
+    async function() {
+
+        if (!currentDownloadUrl) {
+            showError(
+                "THE CUE SHEET DOWNLOAD IS NOT READY."
+            );
+            return;
+        }
+
+        downloadButton.disabled = true;
+        downloadButton.textContent = "DOWNLOADING...";
+
+        try {
+
+            const response = await fetch(
+                currentDownloadUrl,
+                {
+                    method: "GET",
+                    cache: "no-store"
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(
+                    "The cue sheet could not be downloaded."
+                );
+            }
+
+            const blob = await response.blob();
+
+            const blobUrl =
+                window.URL.createObjectURL(blob);
+
+            /*
+             * Create the filename from the show title.
+             */
+            const safeTitle =
+                currentShowTitle
+                    .replace(/[<>:"/\\|?*]/g, "")
+                    .replace(/\s+/g, " ")
+                    .trim();
+
+            const filename =
+                safeTitle +
+                " Live365 Cue Sheet.csv";
+
+            /*
+             * Create a temporary download link.
+             */
+            const link =
+                document.createElement("a");
+
+            link.href = blobUrl;
+            link.download = filename;
+
+            document.body.appendChild(link);
+
+            link.click();
+
+            document.body.removeChild(link);
+
+            /*
+             * Clean up the temporary file URL.
+             */
+            setTimeout(
+                function() {
+                    window.URL.revokeObjectURL(blobUrl);
+                },
+                1000
+            );
+
+            downloadButton.textContent =
+                "DOWNLOAD CUE SHEET!";
+
+            downloadButton.disabled = false;
+
+        } catch (error) {
+
+            showError(
+                error.message ||
+                "Unable to download the cue sheet."
+            );
+
+            downloadButton.textContent =
+                "DOWNLOAD CUE SHEET!";
+
+            downloadButton.disabled = false;
+        }
+
+    }
+);
+
+
+/* =========================================
+   ERROR MESSAGE
+   ========================================= */
+
 function showError(message) {
 
     errorMessage.textContent = message;
+
     errorBox.style.display = "block";
 }
 
