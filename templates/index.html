@@ -183,7 +183,6 @@
         }
 
         @media (max-width: 600px) {
-
             .container {
                 padding: 25px 12px 40px;
             }
@@ -255,7 +254,6 @@
             </label>
 
             <div class="file-box">
-
                 <input
                     type="file"
                     id="audioFile"
@@ -263,7 +261,6 @@
                     accept="audio/*"
                     required
                 >
-
             </div>
 
             <button
@@ -278,7 +275,6 @@
 
     </div>
 
-
     <div
         id="processingBox"
         class="status-box processing"
@@ -286,7 +282,6 @@
         GENERATING YOUR CUE SHEET...<br><br>
         PLEASE WAIT.
     </div>
-
 
     <div
         id="successBox"
@@ -302,28 +297,25 @@
             GENERATED SUCCESSFULLY
         </div>
 
-        <button
+        <a
             id="downloadButton"
             class="download-button"
-            type="button"
+            href="#"
+            download
         >
             DOWNLOAD CUE SHEET!
-        </button>
+        </a>
 
     </div>
-
 
     <div
         id="errorBox"
         class="status-box error"
     >
-
         <div id="errorMessage"></div>
-
     </div>
 
 </div>
-
 
 <script>
 
@@ -335,8 +327,6 @@ const successBox = document.getElementById("successBox");
 const errorBox = document.getElementById("errorBox");
 const errorMessage = document.getElementById("errorMessage");
 const downloadButton = document.getElementById("downloadButton");
-
-let downloadUrl = null;
 
 
 form.addEventListener("submit", async function(event) {
@@ -352,51 +342,26 @@ form.addEventListener("submit", async function(event) {
     const audioFile =
         document.getElementById("audioFile").files[0];
 
-
     if (!showTitle) {
-
-        showError(
-            "PLEASE ENTER YOUR SHOW TITLE."
-        );
-
+        showError("PLEASE ENTER YOUR SHOW TITLE.");
         return;
     }
-
 
     if (!audioFile) {
-
-        showError(
-            "PLEASE SELECT YOUR FULL RADIO SHOW AUDIO FILE."
-        );
-
+        showError("PLEASE SELECT YOUR FULL RADIO SHOW AUDIO FILE.");
         return;
     }
-
 
     const formData = new FormData();
 
-    formData.append(
-        "show_title",
-        showTitle
-    );
-
-    formData.append(
-        "audio",
-        audioFile
-    );
-
+    formData.append("show_title", showTitle);
+    formData.append("audio", audioFile);
 
     generateButton.disabled = true;
-
-    generateButton.textContent =
-        "GENERATING...";
-
+    generateButton.textContent = "GENERATING...";
 
     formCard.classList.add("hidden");
-
-    processingBox.style.display =
-        "block";
-
+    processingBox.style.display = "block";
 
     try {
 
@@ -408,51 +373,32 @@ form.addEventListener("submit", async function(event) {
             }
         );
 
-
-        const data =
-            await response.json();
-
+        const data = await response.json();
 
         if (!response.ok) {
-
             throw new Error(
                 data.error ||
                 "Unable to generate the cue sheet."
             );
         }
 
-
         if (!data.job_id) {
-
             throw new Error(
                 "The system did not return a job ID."
             );
         }
 
-
-        checkStatus(
-            data.job_id
-        );
-
+        checkStatus(data.job_id);
 
     } catch (error) {
 
-        showError(
-            error.message
-        );
+        showError(error.message);
 
-        formCard.classList.remove(
-            "hidden"
-        );
+        formCard.classList.remove("hidden");
+        processingBox.style.display = "none";
 
-        processingBox.style.display =
-            "none";
-
-        generateButton.disabled =
-            false;
-
-        generateButton.textContent =
-            "GENERATE CUE SHEET";
+        generateButton.disabled = false;
+        generateButton.textContent = "GENERATE CUE SHEET";
     }
 
 });
@@ -466,37 +412,42 @@ async function checkStatus(jobId) {
             "/status/" + jobId
         );
 
-
-        const job =
-            await response.json();
-
+        const job = await response.json();
 
         if (!response.ok) {
-
             throw new Error(
                 job.error ||
                 "Unable to check cue sheet status."
             );
         }
 
-
         if (job.status === "complete") {
 
-            processingBox.style.display =
-                "none";
+            processingBox.style.display = "none";
+            successBox.style.display = "block";
 
-            successBox.style.display =
-                "block";
+            /*
+             * IMPORTANT:
+             * Use the server's native download endpoint.
+             * Do not fetch the CSV with JavaScript.
+             */
 
-
-            downloadUrl =
+            downloadButton.href =
                 job.download ||
                 "/download/" + jobId;
 
+            /*
+             * Let the browser handle the download
+             * as a normal file request.
+             */
+
+            downloadButton.setAttribute(
+                "download",
+                ""
+            );
 
             return;
         }
-
 
         if (job.status === "error") {
 
@@ -506,178 +457,31 @@ async function checkStatus(jobId) {
             );
         }
 
-
         setTimeout(
             function() {
-
                 checkStatus(jobId);
-
             },
             2000
         );
 
-
     } catch (error) {
 
-        showError(
-            error.message
-        );
+        showError(error.message);
 
-        formCard.classList.remove(
-            "hidden"
-        );
+        formCard.classList.remove("hidden");
+        processingBox.style.display = "none";
 
-        processingBox.style.display =
-            "none";
-
-        generateButton.disabled =
-            false;
-
-        generateButton.textContent =
-            "GENERATE CUE SHEET";
+        generateButton.disabled = false;
+        generateButton.textContent = "GENERATE CUE SHEET";
     }
 
 }
 
 
-/*
-    FORCE THE CSV DOWNLOAD
-
-    Instead of navigating the browser
-    to the Railway download URL, we:
-
-    1. Fetch the CSV
-    2. Convert it to a Blob
-    3. Create a temporary download link
-    4. Automatically click it
-    5. Remove the temporary link
-
-    This prevents the blank Railway page.
-*/
-
-downloadButton.addEventListener(
-    "click",
-    async function() {
-
-        if (!downloadUrl) {
-
-            showError(
-                "THE CUE SHEET DOWNLOAD IS NOT READY."
-            );
-
-            return;
-        }
-
-
-        const originalText =
-            downloadButton.textContent;
-
-
-        downloadButton.disabled =
-            true;
-
-        downloadButton.textContent =
-            "DOWNLOADING...";
-
-
-        try {
-
-            const response =
-                await fetch(
-                    downloadUrl
-                );
-
-
-            if (!response.ok) {
-
-                throw new Error(
-                    "THE CUE SHEET COULD NOT BE DOWNLOADED."
-                );
-            }
-
-
-            const blob =
-                await response.blob();
-
-
-            const blobUrl =
-                window.URL.createObjectURL(
-                    blob
-                );
-
-
-            const link =
-                document.createElement(
-                    "a"
-                );
-
-
-            link.href =
-                blobUrl;
-
-
-            link.download =
-                "BLOCK105_Live365_Cue_Sheet.csv";
-
-
-            document.body.appendChild(
-                link
-            );
-
-
-            link.click();
-
-
-            link.remove();
-
-
-            window.URL.revokeObjectURL(
-                blobUrl
-            );
-
-
-            downloadButton.textContent =
-                "DOWNLOAD COMPLETE!";
-
-
-            setTimeout(
-                function() {
-
-                    downloadButton.textContent =
-                        originalText;
-
-                    downloadButton.disabled =
-                        false;
-
-                },
-                2500
-            );
-
-
-        } catch (error) {
-
-            showError(
-                error.message
-            );
-
-            downloadButton.textContent =
-                originalText;
-
-            downloadButton.disabled =
-                false;
-        }
-
-    }
-);
-
-
 function showError(message) {
 
-    errorMessage.textContent =
-        message;
-
-    errorBox.style.display =
-        "block";
+    errorMessage.textContent = message;
+    errorBox.style.display = "block";
 }
 
 </script>
