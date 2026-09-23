@@ -318,7 +318,6 @@
 
 </div>
 
-
 <script>
 
 const form = document.getElementById("cueSheetForm");
@@ -424,15 +423,11 @@ async function checkStatus(jobId) {
 
             successBox.style.display = "block";
 
-            if (job.download) {
+            const downloadUrl =
+                job.download ||
+                "/download/" + jobId;
 
-                downloadButton.href = job.download;
-
-            } else {
-
-                downloadButton.href =
-                    "/download/" + jobId;
-            }
+            downloadButton.href = downloadUrl;
 
             return;
         }
@@ -467,3 +462,12 @@ async function checkStatus(jobId) {
 
 
 function showError(message) {
+
+    errorMessage.textContent = message;
+    errorBox.style.display = "block";
+}
+
+</script>
+
+</body>
+</html>
