@@ -99,17 +99,8 @@ def audd_scan(audio_file, token):
     data = {
         "api_token": token,
         "accurate_offsets": "true",
-
-        # COST OPTIMIZATION:
-        # Scan one 12-second recognition window approximately
-        # every 96 seconds instead of every 60 seconds.
-        "skip": "7",
+        "skip": "4",
         "every": "1",
-
-        # SAFETY LIMIT:
-        # Prevent an unexpectedly long file from generating
-        # an uncontrolled number of recognition requests.
-        "limit": "40",
     }
 
     with open(audio_file, "rb") as f:
@@ -125,9 +116,7 @@ def audd_scan(audio_file, token):
     payload = response.json()
 
     if payload.get("status") == "error":
-        raise RuntimeError(
-            str(payload.get("error") or payload)
-        )
+        raise RuntimeError(str(payload.get("error") or payload))
 
     return payload
 
@@ -140,44 +129,29 @@ def collect_candidates(payload, base_offset=0):
     for scan in payload.get("result", []):
         scans += 1
 
-        scan_offset = parse_seconds(
-            scan.get("offset")
-        )
+        scan_offset = parse_seconds(scan.get("offset"))
 
         if scan_offset is None:
             continue
 
         for candidate in scan.get("songs", []):
-
             if not isinstance(candidate, dict):
                 continue
 
-            artist = str(
-                candidate.get("artist") or ""
-            ).strip()
-
-            title = str(
-                candidate.get("title") or ""
-            ).strip()
+            artist = str(candidate.get("artist") or "").strip()
+            title = str(candidate.get("title") or "").strip()
 
             if not artist or not title:
                 continue
 
-            timecode = parse_seconds(
-                candidate.get("timecode")
-            )
+            timecode = parse_seconds(candidate.get("timecode"))
 
             if timecode is None:
                 continue
 
             try:
                 start_offset = (
-                    float(
-                        candidate.get(
-                            "start_offset",
-                            0
-                        )
-                    ) / 1000.0
+                    float(candidate.get("start_offset", 0)) / 1000.0
                 )
             except (ValueError, TypeError):
                 start_offset = 0
@@ -189,29 +163,18 @@ def collect_candidates(payload, base_offset=0):
                 - timecode
             )
 
-            key = song_key(
-                artist,
-                title
-            )
+            key = song_key(artist, title)
 
             songs.setdefault(
                 key,
                 {
                     "artist": artist,
                     "title": title,
-                    "album": str(
-                        candidate.get("album") or ""
-                    ).strip(),
-                    "year": str(
-                        candidate.get(
-                            "release_date"
-                        ) or ""
-                    )[:4],
+                    "album": str(candidate.get("album") or "").strip(),
+                    "year": str(candidate.get("release_date") or "")[:4],
                     "estimates": [],
                 },
-            )["estimates"].append(
-                estimated_start
-            )
+            )["estimates"].append(estimated_start)
 
             candidates += 1
 
@@ -226,10 +189,8 @@ def best_cluster(values, window):
     best = []
 
     for i, start in enumerate(values):
-
         cluster = [
-            v
-            for v in values[i:]
+            v for v in values[i:]
             if v - start <= window
         ]
 
@@ -240,16 +201,31 @@ def best_cluster(values, window):
 
 
 def build_sparse_timeline(songs):
+    """
+    Build the main timeline from AudD's full-show scan.
+
+    IMPORTANT:
+    We do not require multiple detections here.
+
+    The previous optimization required at least two
+    detections for every song. That was too aggressive and
+    could remove legitimate songs from a show.
+
+    We still use clustering when multiple detections exist,
+    but a single valid AudD identification is retained.
+    """
+
     out = []
 
     for song in songs.values():
+        estimates = song.get("estimates", [])
 
-        cluster = best_cluster(
-            song["estimates"],
-            25.0
-        )
+        if not estimates:
+            continue
 
-        if len(cluster) < 2:
+        cluster = best_cluster(estimates, 35.0)
+
+        if not cluster:
             continue
 
         out.append(
@@ -262,47 +238,31 @@ def build_sparse_timeline(songs):
                 "detections": len(cluster),
                 "spread": (
                     max(cluster) - min(cluster)
+                    if len(cluster) > 1
+                    else 0
                 ),
                 "source": "SPARSE",
             }
         )
 
-    return sorted(
-        out,
-        key=lambda x: x["start"]
-    )
+    return sorted(out, key=lambda x: x["start"])
 
 
 def find_ambiguous_times(payload):
     times = []
 
     for scan in payload.get("result", []):
-
         keys = set()
 
         for song in scan.get("songs", []):
-
-            artist = str(
-                song.get("artist") or ""
-            ).strip()
-
-            title = str(
-                song.get("title") or ""
-            ).strip()
+            artist = str(song.get("artist") or "").strip()
+            title = str(song.get("title") or "").strip()
 
             if artist and title:
-                keys.add(
-                    song_key(
-                        artist,
-                        title
-                    )
-                )
+                keys.add(song_key(artist, title))
 
         if len(keys) > 1:
-
-            t = parse_seconds(
-                scan.get("offset")
-            )
+            t = parse_seconds(scan.get("offset"))
 
             if t is not None:
                 times.append(t)
@@ -314,21 +274,13 @@ def build_precision_windows(times):
     windows = []
 
     for center in times:
-
-        start = max(
-            0,
-            center - 60
-        )
-
+        start = max(0, center - 60)
         end = center + 90
 
-        if (
-            windows
-            and start <= windows[-1]["end"]
-        ):
+        if windows and start <= windows[-1]["end"]:
             windows[-1]["end"] = max(
                 windows[-1]["end"],
-                end
+                end,
             )
         else:
             windows.append(
@@ -341,45 +293,28 @@ def build_precision_windows(times):
     return windows
 
 
-def precision_scan(
-    audio,
-    windows,
-    token,
-    workdir
-):
+def precision_scan(audio, windows, token, workdir):
     merged = {}
     total_scans = 0
 
-    for i, window in enumerate(
-        windows,
-        1
-    ):
-
-        out = (
-            Path(workdir)
-            / f"precision_{i}.mp3"
-        )
+    for i, window in enumerate(windows, 1):
+        out = Path(workdir) / f"precision_{i}.mp3"
 
         ffmpeg_extract(
             audio,
             window["start"],
-            window["end"]
-            - window["start"],
+            window["end"] - window["start"],
             out,
         )
 
         data = {
             "api_token": token,
             "accurate_offsets": "true",
-
-            # Precision scan intentionally remains
-            # detailed for ambiguous regions.
             "skip": "0",
             "every": "1",
         }
 
         with open(out, "rb") as f:
-
             response = requests.post(
                 AUDD_URL,
                 data=data,
@@ -394,11 +329,7 @@ def precision_scan(
         if payload.get("status") == "error":
             continue
 
-        for scan in payload.get(
-            "result",
-            []
-        ):
-
+        for scan in payload.get("result", []):
             total_scans += 1
 
             scan_offset = parse_seconds(
@@ -408,36 +339,23 @@ def precision_scan(
             if scan_offset is None:
                 continue
 
-            for candidate in scan.get(
-                "songs",
-                []
-            ):
-
-                if not isinstance(
-                    candidate,
-                    dict
-                ):
+            for candidate in scan.get("songs", []):
+                if not isinstance(candidate, dict):
                     continue
 
                 artist = str(
-                    candidate.get(
-                        "artist"
-                    ) or ""
+                    candidate.get("artist") or ""
                 ).strip()
 
                 title = str(
-                    candidate.get(
-                        "title"
-                    ) or ""
+                    candidate.get("title") or ""
                 ).strip()
 
                 if not artist or not title:
                     continue
 
                 tc = parse_seconds(
-                    candidate.get(
-                        "timecode"
-                    )
+                    candidate.get("timecode")
                 )
 
                 if tc is None:
@@ -448,14 +366,12 @@ def precision_scan(
                         float(
                             candidate.get(
                                 "start_offset",
-                                0
+                                0,
                             )
-                        ) / 1000
+                        )
+                        / 1000
                     )
-                except (
-                    ValueError,
-                    TypeError
-                ):
+                except (ValueError, TypeError):
                     so = 0
 
                 start = (
@@ -465,10 +381,7 @@ def precision_scan(
                     - tc
                 )
 
-                key = song_key(
-                    artist,
-                    title
-                )
+                key = song_key(artist, title)
 
                 merged.setdefault(
                     key,
@@ -476,28 +389,24 @@ def precision_scan(
                         "artist": artist,
                         "title": title,
                         "album": str(
-                            candidate.get(
-                                "album"
-                            ) or ""
+                            candidate.get("album") or ""
                         ).strip(),
                         "year": str(
                             candidate.get(
                                 "release_date"
-                            ) or ""
+                            )
+                            or ""
                         )[:4],
                         "estimates": [],
                     },
-                )["estimates"].append(
-                    start
-                )
+                )["estimates"].append(start)
 
     overrides = []
 
     for song in merged.values():
-
         cluster = best_cluster(
             song["estimates"],
-            8.0
+            8.0,
         )
 
         if len(cluster) < 3:
@@ -509,13 +418,10 @@ def precision_scan(
                 "title": song["title"],
                 "album": song["album"],
                 "year": song["year"],
-                "start": statistics.median(
-                    cluster
-                ),
+                "start": statistics.median(cluster),
                 "detections": len(cluster),
                 "spread": (
-                    max(cluster)
-                    - min(cluster)
+                    max(cluster) - min(cluster)
                 ),
                 "source": "PRECISION",
             }
@@ -524,68 +430,50 @@ def precision_scan(
     return (
         sorted(
             overrides,
-            key=lambda x: x["start"]
+            key=lambda x: x["start"],
         ),
         total_scans,
     )
 
 
-def merge_timelines(
-    sparse,
-    precision
-):
+def merge_timelines(sparse, precision):
     combined = []
     used = set()
 
     for item in sparse:
-
         matches = [
             (i, p)
-            for i, p in enumerate(
-                precision
-            )
+            for i, p in enumerate(precision)
             if (
                 i not in used
                 and song_key(
                     item["artist"],
-                    item["title"]
+                    item["title"],
                 )
                 == song_key(
                     p["artist"],
-                    p["title"]
+                    p["title"],
                 )
             )
         ]
 
         if matches:
-
             i, p = min(
                 matches,
-                key=lambda x:
-                    abs(
-                        item["start"]
-                        - x[1]["start"]
-                    ),
+                key=lambda x: abs(
+                    item["start"] - x[1]["start"]
+                ),
             )
 
             used.add(i)
-            combined.append(
-                p.copy()
-            )
+            combined.append(p.copy())
 
         else:
-            combined.append(
-                item.copy()
-            )
+            combined.append(item.copy())
 
-    for i, p in enumerate(
-        precision
-    ):
-
+    for i, p in enumerate(precision):
         if i not in used:
-            combined.append(
-                p.copy()
-            )
+            combined.append(p.copy())
 
     combined.sort(
         key=lambda x: x["start"]
@@ -594,23 +482,22 @@ def merge_timelines(
     final = []
 
     for item in combined:
-
         if (
             final
             and song_key(
                 item["artist"],
-                item["title"]
+                item["title"],
             )
             == song_key(
                 final[-1]["artist"],
-                final[-1]["title"]
+                final[-1]["title"],
             )
             and abs(
                 item["start"]
                 - final[-1]["start"]
-            ) <= 20
+            )
+            <= 20
         ):
-
             if item["source"] == "PRECISION":
                 final[-1] = item
 
@@ -620,10 +507,7 @@ def merge_timelines(
     return final
 
 
-def build_live365(
-    timeline,
-    show_title
-):
+def build_live365(timeline, show_title):
     markers = [
         {
             "offset": "00:00:00.000",
@@ -636,10 +520,7 @@ def build_live365(
     ]
 
     for item in timeline:
-
-        ts = format_time(
-            item["start"]
-        )
+        ts = format_time(item["start"])
 
         if ts == "00:00:00.000":
             ts = "00:00:00.001"
@@ -656,10 +537,7 @@ def build_live365(
                 "title": item["title"],
                 "artist": item["artist"],
                 "album": album,
-                "year": item.get(
-                    "year",
-                    ""
-                ),
+                "year": item.get("year", ""),
             }
         )
 
@@ -685,27 +563,19 @@ def build_live365(
     corrections = 0
 
     for marker in markers:
-
         if marker["media_type"] == "talk":
             accepted.append(marker)
             continue
 
-        t = ms(
-            marker["offset"]
-        )
+        t = ms(marker["offset"])
 
         violates = any(
             sum(
                 1
                 for x in accepted
                 if (
-                    x["media_type"]
-                    == "music"
-                    and 0
-                    <= t - ms(
-                        x["offset"]
-                    )
-                    <= window
+                    x["media_type"] == "music"
+                    and 0 <= t - ms(x["offset"]) <= window
                 )
             )
             >= maximum
@@ -713,20 +583,11 @@ def build_live365(
         )
 
         if not violates:
-
             accepted.append(marker)
 
         else:
-
-            for prev in reversed(
-                accepted
-            ):
-
-                if (
-                    prev["media_type"]
-                    == "music"
-                ):
-
+            for prev in reversed(accepted):
+                if prev["media_type"] == "music":
                     prev.update(
                         {
                             "media_type": "talk",
@@ -743,17 +604,13 @@ def build_live365(
     return accepted, corrections
 
 
-def write_csv(
-    markers,
-    path
-):
+def write_csv(markers, path):
     with open(
         path,
         "w",
         newline="",
-        encoding="utf-8"
+        encoding="utf-8",
     ) as f:
-
         w = csv.writer(f)
 
         w.writerow(
@@ -768,7 +625,6 @@ def write_csv(
         )
 
         for m in markers:
-
             w.writerow(
                 [
                     m["offset"],
@@ -785,10 +641,9 @@ def process_job(
     job_id,
     audio_path,
     show_title,
-    workdir
+    workdir,
 ):
     try:
-
         token = os.environ.get(
             "AUDD_API_TOKEN"
         )
@@ -799,14 +654,13 @@ def process_job(
             )
 
         JOBS[job_id]["status"] = "running"
-
         JOBS[job_id]["message"] = (
-            "Running full-audio identification..."
+            "Running full-audio identification…"
         )
 
         sparse_payload = audd_scan(
             audio_path,
-            token
+            token,
         )
 
         (
@@ -831,11 +685,10 @@ def process_job(
 
         JOBS[job_id]["message"] = (
             f"Precision-checking "
-            f"{len(windows)} ambiguous region(s)..."
+            f"{len(windows)} ambiguous region(s)…"
         )
 
         if windows:
-
             (
                 precision,
                 precision_scans,
@@ -845,20 +698,18 @@ def process_job(
                 token,
                 workdir,
             )
-
         else:
-
             precision = []
             precision_scans = 0
 
         timeline = merge_timelines(
             sparse,
-            precision
+            precision,
         )
 
         markers, corrections = build_live365(
             timeline,
-            show_title
+            show_title,
         )
 
         csv_path = (
@@ -868,31 +719,22 @@ def process_job(
 
         write_csv(
             markers,
-            csv_path
+            csv_path,
         )
 
         JOBS[job_id].update(
             {
                 "status": "complete",
                 "message": "Complete.",
-                "source_markers": len(
-                    timeline
-                ),
-                "final_markers": len(
-                    markers
-                ),
+                "source_markers": len(timeline),
+                "final_markers": len(markers),
                 "corrections": corrections,
-                "warnings": len(
-                    ambiguous
-                ),
+                "warnings": len(ambiguous),
                 "sparse_scans": sparse_scans,
-                "precision_windows": len(
-                    windows
-                ),
+                "sparse_candidates": sparse_candidates,
+                "precision_windows": len(windows),
                 "precision_scans": precision_scans,
-                "download": (
-                    f"/download/{job_id}"
-                ),
+                "download": f"/download/{job_id}",
                 "timeline": [
                     {
                         "time": format_time(
@@ -912,7 +754,6 @@ def process_job(
         )
 
     except Exception as exc:
-
         JOBS[job_id].update(
             {
                 "status": "error",
@@ -930,38 +771,37 @@ def index():
 
 @app.post("/analyze")
 def analyze():
-
-    upload = request.files.get(
-        "audio"
-    )
+    upload = request.files.get("audio")
 
     show_title = (
-        request.form.get(
-            "show_title"
-        )
+        request.form.get("show_title")
         or ""
     ).strip()
 
     if not upload or not upload.filename:
-
-        return jsonify(
-            {
-                "error": (
-                    "Please select the full "
-                    "radio show audio file."
-                )
-            }
-        ), 400
+        return (
+            jsonify(
+                {
+                    "error": (
+                        "Please select the full "
+                        "radio show audio file."
+                    )
+                }
+            ),
+            400,
+        )
 
     if not show_title:
-
-        return jsonify(
-            {
-                "error": (
-                    "Please enter the show title."
-                )
-            }
-        ), 400
+        return (
+            jsonify(
+                {
+                    "error": (
+                        "Please enter the show title."
+                    )
+                }
+            ),
+            400,
+        )
 
     job_id = uuid.uuid4().hex
 
@@ -972,7 +812,7 @@ def analyze():
 
     workdir.mkdir(
         parents=True,
-        exist_ok=True
+        exist_ok=True,
     )
 
     ext = (
@@ -987,13 +827,11 @@ def analyze():
         / f"show{ext}"
     )
 
-    upload.save(
-        audio_path
-    )
+    upload.save(audio_path)
 
     JOBS[job_id] = {
         "status": "queued",
-        "message": "Queued...",
+        "message": "Queued…",
     }
 
     threading.Thread(
@@ -1016,38 +854,39 @@ def analyze():
 
 @app.get("/status/<job_id>")
 def status(job_id):
-
     job = JOBS.get(job_id)
 
     if not job:
-
-        return jsonify(
-            {
-                "error": "Job not found."
-            }
-        ), 404
+        return (
+            jsonify(
+                {
+                    "error": "Job not found."
+                }
+            ),
+            404,
+        )
 
     return jsonify(job)
 
 
 @app.get("/download/<job_id>")
 def download(job_id):
-
     job = JOBS.get(job_id)
 
     if (
         not job
-        or job.get("status")
-        != "complete"
+        or job.get("status") != "complete"
     ):
-
-        return jsonify(
-            {
-                "error": (
-                    "The CSV is not ready."
-                )
-            }
-        ), 404
+        return (
+            jsonify(
+                {
+                    "error": (
+                        "The CSV is not ready."
+                    )
+                }
+            ),
+            404,
+        )
 
     path = (
         Path(tempfile.gettempdir())
@@ -1056,14 +895,16 @@ def download(job_id):
     )
 
     if not path.exists():
-
-        return jsonify(
-            {
-                "error": (
-                    "CSV file not found."
-                )
-            }
-        ), 404
+        return (
+            jsonify(
+                {
+                    "error": (
+                        "CSV file not found."
+                    )
+                }
+            ),
+            404,
+        )
 
     return send_file(
         path,
@@ -1075,13 +916,12 @@ def download(job_id):
 
 
 if __name__ == "__main__":
-
     app.run(
         host="0.0.0.0",
         port=int(
             os.environ.get(
                 "PORT",
-                8080
+                8080,
             )
         ),
         debug=False,
