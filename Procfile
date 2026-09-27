@@ -1,1 +1,1 @@
-web: python Cue_Sheet_3_0_app_independent_v10.py
+web: python app.py
