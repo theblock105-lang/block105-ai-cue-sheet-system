@@ -780,7 +780,7 @@ def build_live365(timeline, show_title, duration_seconds=None):
         "_protected": True,
     }]
 
-     for raw_item in timeline:
+    for raw_item in timeline:
         item = raw_item
 
         start = float(
