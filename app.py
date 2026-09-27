@@ -781,10 +781,7 @@ def build_live365(timeline, show_title, duration_seconds=None):
     }]
 
     for raw_item in timeline:
-        item = classify_unknown_candidate(
-            raw_item,
-            show_title
-        )
+         item = raw_item
 
         start = float(
             item.get("start", 0) or 0
