@@ -7,7 +7,8 @@ import tempfile
 import threading
 import uuid
 from pathlib import Path
-
+import smtplib
+from email.message import EmailMessage
 import requests
 from flask import Flask, jsonify, render_template, request, send_file
 
@@ -1167,7 +1168,7 @@ def download(job_id):
         download_name=download_name,
     )
 
-
+theblock105@yahoo.com
 if __name__ == "__main__":
 
     app.run(
