@@ -1,1 +1,1 @@
-web: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 1800 app:app
+web: python Cue_Sheet_3_0_app_independent_v10.py
