@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 import smtplib
 from email.message import EmailMessage
+import smtplib
 import requests
 from flask import Flask, jsonify, render_template, request, send_file
 
@@ -1167,6 +1168,91 @@ def download(job_id):
         as_attachment=True,
         download_name=download_name,
     )
+@app.post("/email/<job_id>")
+def email_cue_sheet(job_id):
+
+    job = JOBS.get(job_id)
+
+    if not job or job.get("status") != "complete":
+        return jsonify({
+            "error": "Cue sheet is not ready.",
+            "detail": "Please generate the cue sheet first."
+        }), 404
+
+    csv_path = (
+        Path(tempfile.gettempdir())
+        / f"block105_{job_id}"
+        / "live365_cue_sheet.csv"
+    )
+
+    if not csv_path.exists():
+        return jsonify({
+            "error": "CSV file not found.",
+            "detail": "Please download the cue sheet manually."
+        }), 404
+
+    yahoo_email = os.environ.get("YAHOO_EMAIL")
+    yahoo_password = os.environ.get("YAHOO_APP_PASSWORD")
+
+    if not yahoo_email or not yahoo_password:
+        return jsonify({
+            "error": "EMAIL SERVER NOT CONFIGURED",
+            "detail": "Yahoo email credentials are missing from Railway."
+        }), 500
+
+    show_title = job.get(
+        "show_title",
+        "BLOCK 105 RADIO"
+    )
+
+    message = EmailMessage()
+
+    message["From"] = yahoo_email
+    message["To"] = yahoo_email
+    message["Subject"] = f"{show_title} - Live365 Cue Sheet"
+
+    message.set_content(
+        f"Attached is the Live365 cue sheet for:\n\n"
+        f"{show_title}\n\n"
+        f"THE BLOCK 105 RADIO"
+    )
+
+    with open(csv_path, "rb") as file:
+        message.add_attachment(
+            file.read(),
+            maintype="text",
+            subtype="csv",
+            filename=f"{safe_filename(show_title)} Live365 Cue Sheet.csv"
+        )
+
+    try:
+
+        with smtplib.SMTP(
+            "smtp.mail.yahoo.com",
+            587,
+            timeout=30
+        ) as server:
+
+            server.starttls()
+            server.login(
+                yahoo_email,
+                yahoo_password
+            )
+
+            server.send_message(message)
+
+        return jsonify({
+            "success": True,
+            "message": "Email sent successfully."
+        })
+
+    except Exception as exc:
+
+        return jsonify({
+            "error": "EMAIL FAILED",
+            "detail": str(exc)
+        }), 500
+
 
 
 if __name__ == "__main__":
