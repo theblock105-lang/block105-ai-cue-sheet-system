@@ -1,249 +1,661 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>THE BLOCK 105 RADIO - AI Cue Sheet System</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#1f1f1f;color:#fff;font-family:Arial,Helvetica,sans-serif}
-.container{width:100%;max-width:900px;margin:auto;padding:35px 20px 60px}
-.station-title{text-align:center;color:#ffcc00;font-size:38px;font-weight:900;letter-spacing:1px;margin-bottom:12px}
-.steps{text-align:center;font-size:17px;font-weight:700;letter-spacing:1px;margin-bottom:45px}
-.steps span{color:#ffcc00;margin:0 7px}
-.main-title{text-align:center;font-size:30px;font-weight:800;margin-bottom:35px}
-.form-card{background:#252525;border:2px solid #ffcc00;border-radius:12px;padding:30px}
-label{display:block;font-size:17px;font-weight:700;margin-bottom:10px}
-input[type=text]{width:100%;padding:15px;border-radius:8px;border:1px solid #666;background:#111;color:#fff;font-size:17px;margin-bottom:25px}
-input[type=text]:focus{outline:none;border-color:#ffcc00}
-.file-box{width:100%;padding:18px;border-radius:8px;border:1px solid #666;background:#111;margin-bottom:28px}
-input[type=file]{width:100%;color:#fff;font-size:15px}
-.generate-button,.download-button{display:block;width:100%;border:0;border-radius:9px;background:#ffcc00;color:#000;font-size:20px;font-weight:900;padding:18px 20px;cursor:pointer;text-align:center;text-decoration:none}
-.generate-button:hover,.download-button:hover{background:#ffd633}
-.generate-button:disabled{opacity:.6;cursor:not-allowed}
-.status-box{display:none;margin-top:30px;padding:22px;border-radius:9px;text-align:center;font-size:18px;font-weight:700}
-.processing{background:#292929;border:1px solid #666}
-.success{background:#073b1f;border:2px solid #28c76f}
-.success-check{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;background:#28c76f;display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:900}
-.success-message{font-size:24px;font-weight:900;line-height:1.3;margin-bottom:25px}
-.error{background:#4a1111;border:2px solid #ff5555}
-.hidden{display:none!important}
-@media(max-width:600px){
-.container{padding:25px 12px 40px}
-.station-title{font-size:28px}
-.steps{font-size:13px;line-height:1.8}
-.main-title{font-size:23px}
-.form-card{padding:20px}
-.success-message{font-size:20px}
-}
-</style>
+    <title>THE BLOCK 105 RADIO - Cue Sheet Generator</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: #1f1f1f;
+            color: #ffffff;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 35px 20px 60px;
+        }
+
+        .station-title {
+            text-align: center;
+            color: #ffcc00;
+            font-size: 38px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+
+        .steps {
+            text-align: center;
+            color: #ffffff;
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-bottom: 45px;
+        }
+
+        .steps span {
+            color: #ffcc00;
+            margin: 0 7px;
+        }
+
+        .main-title {
+            color: #ffffff;
+            font-size: 30px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .form-card {
+            background: #252525;
+            border: 2px solid #ffcc00;
+            border-radius: 12px;
+            padding: 30px;
+        }
+
+        label {
+            display: block;
+            color: #ffffff;
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #666;
+            background: #111111;
+            color: #ffffff;
+            font-size: 17px;
+            margin-bottom: 25px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #ffcc00;
+        }
+
+        .file-box {
+            width: 100%;
+            padding: 18px;
+            border-radius: 8px;
+            border: 1px solid #666;
+            background: #111111;
+            margin-bottom: 28px;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            color: #ffffff;
+            font-size: 15px;
+        }
+
+        .generate-button,
+        .download-button {
+            display: block;
+            width: 100%;
+            border: none;
+            border-radius: 9px;
+            background: #ffcc00;
+            color: #000000;
+            font-size: 20px;
+            font-weight: 900;
+            padding: 18px 20px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .generate-button:hover,
+        .download-button:hover {
+            background: #ffd633;
+        }
+
+        .generate-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status-box {
+            display: none;
+            margin-top: 30px;
+            padding: 22px;
+            border-radius: 9px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .processing {
+            background: #292929;
+            border: 1px solid #666;
+            color: #ffffff;
+        }
+
+        .meter-title {
+            color: #ffcc00;
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            margin-bottom: 18px;
+        }
+
+        .meter-bridge {
+            height: 120px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 5px;
+            padding: 18px 14px;
+            margin: 0 auto 18px;
+            max-width: 620px;
+            background: #101010;
+            border: 1px solid #4d4d4d;
+            border-radius: 8px;
+            box-shadow: inset 0 0 18px rgba(0,0,0,.75);
+        }
+
+        .meter-bar {
+            width: 7px;
+            min-height: 10px;
+            height: 25%;
+            border-radius: 2px 2px 0 0;
+            background: #ffcc00;
+            box-shadow: 0 0 8px rgba(255,204,0,.45);
+            animation: meterPulse var(--speed) ease-in-out infinite alternate;
+            animation-delay: var(--delay);
+        }
+
+        @keyframes meterPulse {
+            0% { height: 12%; opacity: .55; }
+            35% { height: 58%; opacity: .85; }
+            65% { height: 28%; opacity: .7; }
+            100% { height: 92%; opacity: 1; }
+        }
+
+        .processing-note {
+            color: #dddddd;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .success {
+            background: #073b1f;
+            border: 2px solid #28c76f;
+            color: #ffffff;
+        }
+
+        .success-check {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 18px;
+            border-radius: 50%;
+            background: #28c76f;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 42px;
+            font-weight: 900;
+        }
+
+        .success-message {
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1.3;
+            margin-bottom: 25px;
+        }
+
+        .error {
+            background: #4a1111;
+            border: 2px solid #ff5555;
+            color: #ffffff;
+        }
+
+        .email-button {
+            display: block;
+            width: 100%;
+            border: none;
+            border-radius: 9px;
+            background: #ffcc00;
+            color: #000000;
+            font-size: 20px;
+            font-weight: 900;
+            padding: 18px 20px;
+            cursor: pointer;
+            text-align: center;
+            margin-bottom: 14px;
+        }
+
+        .email-button:hover {
+            background: #ffd633;
+        }
+
+        .email-button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .secondary-download {
+            background: #333333;
+            color: #ffffff;
+            border: 1px solid #666666;
+            font-size: 16px;
+            padding: 14px 20px;
+        }
+
+        .secondary-download:hover {
+            background: #444444;
+        }
+
+        .email-status {
+            display: none;
+            margin-top: 18px;
+            padding: 16px;
+            border-radius: 9px;
+            font-size: 17px;
+            font-weight: 900;
+            line-height: 1.45;
+        }
+
+        .email-status.success {
+            display: block;
+            background: #073b1f;
+            border: 2px solid #28c76f;
+            color: #ffffff;
+        }
+
+        .email-status.failure {
+            display: block;
+            background: #4a1111;
+            border: 2px solid #ff5555;
+            color: #ffffff;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .meter-bar {
+                animation: none;
+                height: 55%;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px 12px 40px;
+            }
+
+            .station-title {
+                font-size: 28px;
+            }
+
+            .steps {
+                font-size: 13px;
+                line-height: 1.8;
+            }
+
+            .main-title {
+                font-size: 23px;
+            }
+
+            .form-card {
+                padding: 20px;
+            }
+
+            .success-message {
+                font-size: 20px;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
 <div class="container">
 
-<div class="station-title">THE BLOCK 105 RADIO</div>
+    <!-- STATION NAME -->
+    <div class="station-title">
+        THE BLOCK 105 RADIO
+    </div>
 
-<div class="steps">
-SHOW TITLE <span>*</span>
-UPLOAD AUDIO FILE <span>*</span>
-GENERATE CUE SHEET <span>*</span>
-DOWNLOAD
+    <!-- SIMPLE PROCESS -->
+    <div class="steps">
+        SHOW TITLE
+        <span>*</span>
+        UPLOAD AUDIO FILE
+        <span>*</span>
+        GENERATE CUE SHEET
+        <span>*</span>
+        DOWNLOAD
+    </div>
+
+    <!-- MAIN HEADING -->
+    <div class="main-title">
+        GENERATE YOUR BLOCK 105 RADIO CUE SHEET
+    </div>
+
+    <!-- MAIN FORM -->
+    <div id="formCard" class="form-card">
+
+        <form id="cueSheetForm">
+
+            <label for="showTitle">
+                SHOW TITLE
+            </label>
+
+            <input
+                type="text"
+                id="showTitle"
+                name="show_title"
+                placeholder="Enter your show title"
+                required
+            >
+
+            <label for="audioFile">
+                UPLOAD AUDIO FILE
+            </label>
+
+            <div class="file-box">
+                <input
+                    type="file"
+                    id="audioFile"
+                    name="audio"
+                    accept="audio/*"
+                    required
+                >
+            </div>
+
+            <button
+                type="submit"
+                id="generateButton"
+                class="generate-button"
+            >
+                GENERATE CUE SHEET
+            </button>
+
+        </form>
+
+    </div>
+
+    <!-- PROCESSING MESSAGE -->
+    <div
+        id="processingBox"
+        class="status-box processing"
+    >
+        <div class="meter-title">GENERATING YOUR CUE SHEET</div>
+
+        <div class="meter-bridge" aria-label="Audio processing meter">
+            <div class="meter-bar" style="--speed:0.72s;--delay:-0.10s"></div>
+            <div class="meter-bar" style="--speed:0.88s;--delay:-0.34s"></div>
+            <div class="meter-bar" style="--speed:0.63s;--delay:-0.52s"></div>
+            <div class="meter-bar" style="--speed:0.79s;--delay:-0.21s"></div>
+            <div class="meter-bar" style="--speed:0.57s;--delay:-0.43s"></div>
+            <div class="meter-bar" style="--speed:0.91s;--delay:-0.67s"></div>
+            <div class="meter-bar" style="--speed:0.69s;--delay:-0.28s"></div>
+            <div class="meter-bar" style="--speed:0.83s;--delay:-0.59s"></div>
+            <div class="meter-bar" style="--speed:0.61s;--delay:-0.16s"></div>
+            <div class="meter-bar" style="--speed:0.76s;--delay:-0.48s"></div>
+            <div class="meter-bar" style="--speed:0.66s;--delay:-0.31s"></div>
+            <div class="meter-bar" style="--speed:0.86s;--delay:-0.72s"></div>
+            <div class="meter-bar" style="--speed:0.59s;--delay:-0.39s"></div>
+            <div class="meter-bar" style="--speed:0.81s;--delay:-0.55s"></div>
+            <div class="meter-bar" style="--speed:0.70s;--delay:-0.24s"></div>
+            <div class="meter-bar" style="--speed:0.94s;--delay:-0.63s"></div>
+            <div class="meter-bar" style="--speed:0.64s;--delay:-0.18s"></div>
+            <div class="meter-bar" style="--speed:0.77s;--delay:-0.45s"></div>
+            <div class="meter-bar" style="--speed:0.68s;--delay:-0.70s"></div>
+            <div class="meter-bar" style="--speed:0.89s;--delay:-0.36s"></div>
+        </div>
+
+        <div class="processing-note">PLEASE WAIT — ANALYZING YOUR AUDIO AND BUILDING YOUR LIVE365 CUE SHEET.</div>
+    </div>
+
+    <!-- SUCCESS MESSAGE -->
+    <div
+        id="successBox"
+        class="status-box success"
+    >
+
+        <div class="success-check">
+            ✓
+        </div>
+
+        <div class="success-message">
+            CUE SHEET GENERATED
+        </div>
+
+        <button
+            type="button"
+            id="emailButton"
+            class="email-button"
+        >
+            EMAIL DIRECTLY TO THE BLOCK 105 RADIO
+        </button>
+
+        <a
+            id="downloadButton"
+            class="download-button secondary-download"
+            href="#"
+        >
+            DOWNLOAD CUE SHEET
+        </a>
+
+        <div id="emailStatus" class="email-status" aria-live="polite"></div>
+
+    </div>
+
+    <!-- ERROR MESSAGE -->
+    <div
+        id="errorBox"
+        class="status-box error"
+    >
+        <div id="errorMessage"></div>
+    </div>
+
 </div>
 
-<div class="main-title">
-GENERATE YOUR BLOCK 105 RADIO CUE SHEET
-</div>
-
-<div id="formCard" class="form-card">
-
-<form id="cueSheetForm">
-
-<label for="showTitle">SHOW TITLE</label>
-
-<input
-type="text"
-id="showTitle"
-name="show_title"
-placeholder="Enter your show title"
-required
->
-
-<label for="audioFile">UPLOAD AUDIO FILE</label>
-
-<div class="file-box">
-<input
-type="file"
-id="audioFile"
-name="audio"
-accept="audio/*"
-required
->
-</div>
-
-<button
-type="submit"
-id="generateButton"
-class="generate-button"
->
-GENERATE CUE SHEET
-</button>
-
-</form>
-</div>
-
-<div id="processingBox" class="status-box processing">
-GENERATING YOUR CUE SHEET...<br><br>
-PLEASE WAIT.
-</div>
-
-<div id="successBox" class="status-box success">
-
-<div class="success-check">✓</div>
-
-<div class="success-message">
-THE BLOCK 105 RADIO CUE SHEET<br>
-GENERATED SUCCESSFULLY
-</div>
-
-<a id="downloadButton" class="download-button" href="#">
-DOWNLOAD CUE SHEET!
-</a>
-
-</div>
-
-<div id="errorBox" class="status-box error">
-<div id="errorMessage"></div>
-</div>
-
-</div>
 
 <script>
-const form=document.getElementById("cueSheetForm");
-const formCard=document.getElementById("formCard");
-const generateButton=document.getElementById("generateButton");
-const processingBox=document.getElementById("processingBox");
-const successBox=document.getElementById("successBox");
-const errorBox=document.getElementById("errorBox");
-const errorMessage=document.getElementById("errorMessage");
-const downloadButton=document.getElementById("downloadButton");
 
-form.addEventListener("submit",async function(event){
-event.preventDefault();
+// Cue Sheet 3.0 backend. Using an absolute Railway URL makes this page work when embedded in GoDaddy.
+const API_BASE_URL = "";
 
-errorBox.style.display="none";
-successBox.style.display="none";
+const form = document.getElementById("cueSheetForm");
+const formCard = document.getElementById("formCard");
+const generateButton = document.getElementById("generateButton");
+const processingBox = document.getElementById("processingBox");
+const successBox = document.getElementById("successBox");
+const errorBox = document.getElementById("errorBox");
+const errorMessage = document.getElementById("errorMessage");
+const downloadButton = document.getElementById("downloadButton");
+const emailButton = document.getElementById("emailButton");
+const emailStatus = document.getElementById("emailStatus");
 
-const showTitle=document.getElementById("showTitle").value.trim();
-const audioFile=document.getElementById("audioFile").files[0];
 
-if(!showTitle){
-showError("PLEASE ENTER YOUR SHOW TITLE.");
-return;
-}
+form.addEventListener("submit", async function(event) {
 
-if(!audioFile){
-showError("PLEASE SELECT YOUR FULL RADIO SHOW AUDIO FILE.");
-return;
-}
+    event.preventDefault();
 
-const formData=new FormData();
-formData.append("show_title",showTitle);
-formData.append("audio",audioFile);
+    errorBox.style.display = "none";
+    successBox.style.display = "none";
 
-generateButton.disabled=true;
-generateButton.textContent="GENERATING...";
-formCard.classList.add("hidden");
-processingBox.style.display="block";
+    const showTitle = document.getElementById("showTitle").value.trim();
+    const audioFile = document.getElementById("audioFile").files[0];
 
-try{
-const response=await fetch("/analyze",{
-method:"POST",
-body:formData
+    if (!showTitle) {
+        showError("PLEASE ENTER YOUR SHOW TITLE.");
+        return;
+    }
+
+    if (!audioFile) {
+        showError("PLEASE SELECT YOUR FULL RADIO SHOW AUDIO FILE.");
+        return;
+    }
+
+    const formData = new FormData();
+
+    formData.append("show_title", showTitle);
+    formData.append("audio", audioFile);
+
+    generateButton.disabled = true;
+    generateButton.textContent = "GENERATING...";
+
+    formCard.classList.add("hidden");
+    processingBox.style.display = "block";
+
+    try {
+
+        const response = await fetch(API_BASE_URL + "/analyze", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.error || "Unable to generate the cue sheet."
+            );
+        }
+
+        if (!data.job_id) {
+            throw new Error(
+                "The system did not return a job ID."
+            );
+        }
+
+        checkStatus(data.job_id);
+
+    } catch (error) {
+
+        showError(error.message);
+
+        formCard.classList.remove("hidden");
+        processingBox.style.display = "none";
+
+        generateButton.disabled = false;
+        generateButton.textContent = "GENERATE CUE SHEET";
+    }
+
 });
 
-const data=await response.json();
 
-if(!response.ok){
-throw new Error(data.error||"Unable to generate the cue sheet.");
-}
+emailButton.addEventListener("click", async function() {
+    if (!window.generatedJobId) return;
+    emailButton.disabled = true;
+    emailButton.textContent = "EMAILING...";
+    emailStatus.className = "email-status";
+    emailStatus.style.display = "none";
 
-if(!data.job_id){
-throw new Error("The system did not return a job ID.");
-}
-
-checkStatus(data.job_id);
-
-}catch(error){
-showError(error.message);
-formCard.classList.remove("hidden");
-processingBox.style.display="none";
-generateButton.disabled=false;
-generateButton.textContent="GENERATE CUE SHEET";
-}
+    try {
+        const response = await fetch("/email/" + window.generatedJobId, {
+            method: "POST"
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error((data.error || "EMAIL SERVER DOWN") + "|" + (data.detail || "PLEASE DOWNLOAD AND SEND CUE SHEET MANUALLY."));
+        }
+        emailStatus.textContent = "EMAIL SENT ✓";
+        emailStatus.className = "email-status success";
+        emailStatus.style.display = "block";
+        emailButton.textContent = "EMAIL SENT ✓";
+    } catch (error) {
+        const parts = error.message.split("|");
+        emailStatus.innerHTML = "<strong>" + parts[0] + "</strong><br>" + (parts[1] || "PLEASE DOWNLOAD AND SEND CUE SHEET MANUALLY.");
+        emailStatus.className = "email-status failure";
+        emailStatus.style.display = "block";
+        emailButton.disabled = false;
+        emailButton.textContent = "EMAIL DIRECTLY TO THE BLOCK 105 RADIO";
+    }
 });
 
-async function checkStatus(jobId){
 
-try{
+async function checkStatus(jobId) {
 
-const response=await fetch("/status/"+jobId);
-const job=await response.json();
+    try {
 
-if(!response.ok){
-throw new Error(job.error||"Unable to check cue sheet status.");
+        const response = await fetch(
+            API_BASE_URL + "/status/" + jobId
+        );
+
+        const job = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                job.error || "Unable to check cue sheet status."
+            );
+        }
+
+        if (job.status === "complete") {
+
+            window.generatedJobId = jobId;
+            emailStatus.style.display = "none";
+            emailButton.disabled = false;
+            emailButton.textContent = "EMAIL DIRECTLY TO THE BLOCK 105 RADIO";
+            processingBox.style.display = "none";
+
+            successBox.style.display = "block";
+
+            if (job.download) {
+                downloadButton.href = API_BASE_URL + job.download;
+            } else {
+                downloadButton.href =
+                    API_BASE_URL + "/download/" + jobId;
+            }
+
+            return;
+        }
+
+        if (job.status === "error") {
+
+            throw new Error(
+                job.message ||
+                "The cue sheet could not be generated."
+            );
+        }
+
+        setTimeout(
+            function() {
+                checkStatus(jobId);
+            },
+            2000
+        );
+
+    } catch (error) {
+
+        showError(error.message);
+
+        formCard.classList.remove("hidden");
+        processingBox.style.display = "none";
+
+        generateButton.disabled = false;
+        generateButton.textContent = "GENERATE CUE SHEET";
+    }
+
 }
 
-if(job.status==="complete"){
 
-processingBox.style.display="none";
-successBox.style.display="block";
+function showError(message) {
 
-const downloadUrl=job.download||"/download/"+jobId;
-
-downloadButton.onclick=function(event){
-event.preventDefault();
-
-if(window.parent!==window){
-window.parent.postMessage({
-type:"BLOCK105_DOWNLOAD",
-url:downloadUrl
-},"*");
-}else{
-window.location.href=downloadUrl;
-}
-};
-
-return;
+    errorMessage.textContent = message;
+    errorBox.style.display = "block";
 }
 
-if(job.status==="error"){
-throw new Error(
-job.message||"The cue sheet could not be generated."
-);
-}
-
-setTimeout(function(){
-checkStatus(jobId);
-},2000);
-
-}catch(error){
-
-showError(error.message);
-formCard.classList.remove("hidden");
-processingBox.style.display="none";
-generateButton.disabled=false;
-generateButton.textContent="GENERATE CUE SHEET";
-
-}
-}
-
-function showError(message){
-errorMessage.textContent=message;
-errorBox.style.display="block";
-}
 </script>
 
 </body>
