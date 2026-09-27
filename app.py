@@ -703,130 +703,337 @@ def merge_timelines(
     return final
 
 
-def build_live365(
-    timeline,
-    show_title,
-):
-    markers = [
-        {
-            "offset": "00:00:00.000",
-            "media_type": "talk",
-            "title": show_title,
-            "artist": show_title,
-            "album": "",
-            "year": "",
-        }
-    ]
 
-    for item in timeline:
+def build_live365(timeline, show_title, duration_seconds=None):
+    """
+    Final Live365 protection layer.
 
-        ts = format_time(
-            item["start"]
+    Keeps the existing song-recognition timeline intact, then:
+    1. Protects the show-title marker at 00:00:00.000
+    2. Removes duplicate offsets
+    3. Removes markers closer than 2 seconds apart
+    4. Enforces Live365 marker-density limits
+    5. Rechecks everything before returning the final markers
+    """
+
+    def to_ms(marker):
+        parts = str(marker.get("offset", "00:00:00.000")).split(":")
+        if len(parts) != 3:
+            return 0
+
+        try:
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds, millis = parts[2].split(".")
+            return (
+                hours * 3600000
+                + minutes * 60000
+                + int(seconds) * 1000
+                + int(millis[:3].ljust(3, "0"))
+            )
+        except Exception:
+            return 0
+
+    def density_violations(items):
+        limits = [
+            (600000, 5),
+            (900000, 7),
+            (1800000, 13),
+            (4680000, 33),
+        ]
+
+        violations = []
+
+        ordered = sorted(items, key=to_ms)
+
+        for window_ms, maximum in limits:
+            for i, marker in enumerate(ordered):
+                start = to_ms(marker)
+                end = start + window_ms
+
+                count = sum(
+                    1
+                    for m in ordered
+                    if start <= to_ms(m) < end
+                )
+
+                if count > maximum:
+                    violations.append(
+                        (start, window_ms, maximum, count, i)
+                    )
+
+        return violations
+
+    corrections = 0
+
+    # ---------------------------------------------------------
+    # BUILD THE INITIAL MARKER LIST FROM THE EXISTING TIMELINE
+    # ---------------------------------------------------------
+
+    markers = [{
+        "offset": "00:00:00.000",
+        "media_type": "talk",
+        "title": show_title,
+        "artist": show_title,
+        "album": "",
+        "year": "",
+        "_protected": True,
+    }]
+
+    for raw_item in timeline:
+        item = classify_unknown_candidate(
+            raw_item,
+            show_title
         )
 
+        start = float(
+            item.get("start", 0) or 0
+        )
+
+        if start < 0 or start > 7200:
+            continue
+
+        ts = format_time(start)
+
+        # Never allow a music marker to stack on
+        # the protected show-title marker.
         if ts == "00:00:00.000":
             ts = "00:00:00.001"
 
-        album = (
-            item.get("album")
-            or f"{item['title']} (Single)"
-        )
+        media_type = str(
+            item.get("media_type") or "music"
+        ).strip().casefold()
 
-        markers.append(
-            {
-                "offset": ts,
-                "media_type": "music",
-                "title": item["title"],
-                "artist": item["artist"],
-                "album": album,
-                "year": item.get(
-                    "year",
-                    "",
-                ),
-            }
-        )
+        title = str(
+            item.get("title") or ""
+        ).strip()
 
-    def ms(ts):
-        h, m, s = ts.split(":")
-        sec, milli = s.split(".")
+        artist = str(
+            item.get("artist") or ""
+        ).strip()
 
-        return (
-            int(h) * 3600000
-            + int(m) * 60000
-            + int(sec) * 1000
-            + int(milli)
-        )
+        album = str(
+            item.get("album") or ""
+        ).strip()
 
-    limits = [
-        (600000, 5),
-        (900000, 7),
-        (1800000, 13),
-        (4680000, 33),
-    ]
-
-    accepted = []
-    corrections = 0
-
-    for marker in markers:
-
-        if marker["media_type"] == "talk":
-            accepted.append(marker)
+        if not title and media_type != "independent":
             continue
 
-        t = ms(
-            marker["offset"]
-        )
+        if (
+            media_type == "independent"
+            or artist.casefold() == "independent artist"
+        ):
+            media_type = "independent"
+            title = show_title
+            artist = "Independent Artist"
+            album = "Non-Copy-Right"
 
-        violates = any(
-            sum(
-                1
-                for x in accepted
-                if (
-                    x["media_type"]
-                    == "music"
-                    and 0
-                    <= t - ms(
-                        x["offset"]
-                    )
-                    <= window
-                )
-            )
-            >= maximum
-            for window, maximum in limits
-        )
-
-        if not violates:
-
-            accepted.append(
-                marker
-            )
+        elif media_type == "talk":
+            title = show_title
+            artist = show_title
+            album = ""
 
         else:
+            album = album or f"{title} (Single)"
 
-            for prev in reversed(
-                accepted
-            ):
+        markers.append({
+            "offset": ts,
+            "media_type": media_type,
+            "title": title,
+            "artist": artist,
+            "album": album,
+            "year": (
+                ""
+                if media_type in ("talk", "independent")
+                else str(item.get("year") or "")
+            ),
+        })
 
-                if (
-                    prev["media_type"]
-                    == "music"
-                ):
+    # ---------------------------------------------------------
+    # SORT
+    # ---------------------------------------------------------
 
-                    prev.update(
-                        {
-                            "media_type": "talk",
-                            "title": show_title,
-                            "artist": show_title,
-                            "album": "",
-                            "year": "",
-                        }
+    markers.sort(key=to_ms)
+
+    # ---------------------------------------------------------
+    # REMOVE DUPLICATE OFFSETS
+    # ---------------------------------------------------------
+
+    unique = []
+    seen_offsets = set()
+
+    for marker in markers:
+        offset = to_ms(marker)
+
+        if offset in seen_offsets:
+            corrections += 1
+            continue
+
+        seen_offsets.add(offset)
+        unique.append(marker)
+
+    markers = unique
+
+    # ---------------------------------------------------------
+    # REMOVE MARKERS LESS THAN 2 SECONDS APART
+    #
+    # The protected 00:00:00 marker always wins.
+    # ---------------------------------------------------------
+
+    cleaned = []
+
+    for marker in markers:
+        current_ms = to_ms(marker)
+
+        if not cleaned:
+            cleaned.append(marker)
+            continue
+
+        previous_ms = to_ms(cleaned[-1])
+
+        if current_ms - previous_ms < 2000:
+            # Never remove the protected opening marker.
+            if cleaned[-1].get("_protected"):
+                corrections += 1
+                continue
+
+            # If the current marker is protected, keep it
+            # and remove the previous non-protected marker.
+            if marker.get("_protected"):
+                cleaned.pop()
+                cleaned.append(marker)
+                corrections += 1
+                continue
+
+            # Otherwise remove the newer marker.
+            corrections += 1
+            continue
+
+        cleaned.append(marker)
+
+    markers = cleaned
+
+    # ---------------------------------------------------------
+    # ENFORCE LIVE365 MARKER-DENSITY LIMITS
+    #
+    # 5 markers / 10 minutes
+    # 7 markers / 15 minutes
+    # 13 markers / 30 minutes
+    # 33 markers / 78 minutes
+    # ---------------------------------------------------------
+
+    while True:
+        violations = density_violations(markers)
+
+        if not violations:
+            break
+
+        candidates = []
+
+        for start, window_ms, maximum, count, _ in violations:
+            end = start + window_ms
+
+            for index, marker in enumerate(markers):
+                if index == 0:
+                    continue
+
+                marker_ms = to_ms(marker)
+
+                if start <= marker_ms < end:
+                    candidates.append(
+                        (
+                            index,
+                            count - maximum,
+                            marker_ms
+                        )
                     )
 
-                    corrections += 1
-                    break
+        if not candidates:
+            break
 
-    return accepted, corrections
+        # Remove the newest offending marker.
+        # This preserves the earlier recognized song markers
+        # while bringing the sheet back under Live365 limits.
+        candidates.sort(
+            key=lambda x: (
+                x[1],
+                x[2]
+            ),
+            reverse=True
+        )
 
+        remove_index = candidates[0][0]
+
+        markers.pop(remove_index)
+        corrections += 1
+
+    # ---------------------------------------------------------
+    # ENSURE THE OPENING SHOW-TITLE MARKER STILL EXISTS
+    # ---------------------------------------------------------
+
+    if not markers or to_ms(markers[0]) != 0:
+        markers.insert(
+            0,
+            {
+                "offset": "00:00:00.000",
+                "media_type": "talk",
+                "title": show_title,
+                "artist": show_title,
+                "album": "",
+                "year": "",
+                "_protected": True,
+            }
+        )
+        corrections += 1
+
+    # ---------------------------------------------------------
+    # FINAL SORT
+    # ---------------------------------------------------------
+
+    markers.sort(key=to_ms)
+
+    # ---------------------------------------------------------
+    # FINAL HARD QC
+    # ---------------------------------------------------------
+
+    offsets = [
+        to_ms(marker)
+        for marker in markers
+    ]
+
+    if len(offsets) != len(set(offsets)):
+        raise RuntimeError(
+            "Final QC failed: duplicate marker offsets remain."
+        )
+
+    if any(
+        b - a < 2000
+        for a, b in zip(
+            offsets,
+            offsets[1:]
+        )
+    ):
+        raise RuntimeError(
+            "Final QC failed: markers remain less than 2 seconds apart."
+        )
+
+    remaining_violations = density_violations(
+        markers
+    )
+
+    if remaining_violations:
+        raise RuntimeError(
+            "Final QC failed: Live365 marker-density violations remain."
+        )
+
+    # ---------------------------------------------------------
+    # REMOVE INTERNAL PROTECTION FLAG BEFORE CSV CREATION
+    # ---------------------------------------------------------
+
+    for marker in markers:
+        marker.pop("_protected", None)
+
+    return markers, corrections
 
 def write_csv(
     markers,
