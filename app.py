@@ -1191,13 +1191,12 @@ def email_cue_sheet(job_id):
             "detail": "Please download the cue sheet manually."
         }), 404
 
-    yahoo_email = os.environ.get("YAHOO_EMAIL")
-    yahoo_password = os.environ.get("YAHOO_APP_PASSWORD")
+    api_key = os.environ.get("RESEND_API_KEY")
 
-    if not yahoo_email or not yahoo_password:
+    if not api_key:
         return jsonify({
             "error": "EMAIL SERVER NOT CONFIGURED",
-            "detail": "Yahoo email credentials are missing from Railway."
+            "detail": "RESEND_API_KEY is missing from Railway."
         }), 500
 
     show_title = job.get(
@@ -1205,41 +1204,49 @@ def email_cue_sheet(job_id):
         "BLOCK 105 RADIO"
     )
 
-    message = EmailMessage()
-
-    message["From"] = yahoo_email
-    message["To"] = yahoo_email
-    message["Subject"] = f"{show_title} - Live365 Cue Sheet"
-
-    message.set_content(
-        f"Attached is the Live365 cue sheet for:\n\n"
-        f"{show_title}\n\n"
-        f"THE BLOCK 105 RADIO"
-    )
-
-    with open(csv_path, "rb") as file:
-        message.add_attachment(
-            file.read(),
-            maintype="text",
-            subtype="csv",
-            filename=f"{safe_filename(show_title)} Live365 Cue Sheet.csv"
-        )
-
     try:
 
-        with smtplib.SMTP(
-            "smtp.mail.yahoo.com",
-            587,
-            timeout=30
-        ) as server:
+        with open(csv_path, "rb") as file:
+            csv_data = file.read()
 
-            server.starttls()
-            server.login(
-                yahoo_email,
-                yahoo_password
-            )
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": "onboarding@resend.dev",
+                "to": ["theblock105@yahoo.com"],
+                "subject": (
+                    f"{show_title} - Live365 Cue Sheet"
+                ),
+                "text": (
+                    f"THE BLOCK 105 RADIO\n\n"
+                    f"Attached is the Live365 cue sheet for:\n\n"
+                    f"{show_title}\n\n"
+                    f"THE BLOCK 105 RADIO"
+                ),
+                "attachments": [
+                    {
+                        "filename": (
+                            f"{safe_filename(show_title)} "
+                            "Live365 Cue Sheet.csv"
+                        ),
+                        "content": base64.b64encode(
+                            csv_data
+                        ).decode("utf-8"),
+                    }
+                ],
+            },
+            timeout=30,
+        )
 
-            server.send_message(message)
+        if response.status_code >= 400:
+            return jsonify({
+                "error": "EMAIL FAILED",
+                "detail": response.text,
+            }), 500
 
         return jsonify({
             "success": True,
@@ -1252,6 +1259,7 @@ def email_cue_sheet(job_id):
             "error": "EMAIL FAILED",
             "detail": str(exc)
         }), 500
+
 
 
 
